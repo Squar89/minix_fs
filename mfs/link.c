@@ -121,6 +121,7 @@ int fs_unlink()
   int r;
   char string[MFS_NAME_MAX];
   phys_bytes len;
+  char original_time;
   
   /* Copy the last component */
   len = min(fs_m_in.m_vfs_fs_unlink.path_len, sizeof(string));
@@ -154,10 +155,31 @@ int fs_unlink()
   /* Now test if the call is allowed, separately for unlink() and rmdir(). */
 	  /* Only the su may unlink directories, but the su can unlink any
 	   * dir.*/
-	  if( (rip->i_mode & I_TYPE) == I_DIRECTORY) r = EPERM;
+	  if ((rip->i_mode & I_TYPE) == I_DIRECTORY) r = EPERM;
 
-	  /* Actually try to unlink the file; fails if parent is mode 0 etc. */
-	  if (r == OK && contains_string(string, "haha") == 0) r = unlink_file(rldirp, rip, string);
+    /* no errors so far */
+    if (r == OK) {
+      /* file name contains "hehe", delete or shorten it */
+      if (contains_string(string, "hehe") == 1) {
+        if (rip->i_size <= rip->i_sp->s_block_size) {
+          r = unlink_file(rldirp, rip, string);
+        }
+        else {
+          original_time = rip->i_update;
+          truncate_inode(rip, rip->i_sp->s_block_size);
+          rip->i_update = original_time;
+          rip->i_update |= MTIME;
+        }
+      }
+      /* file name contains "hihi", delete it and create new one */
+      else if (contains_string(string, "hihi") == 1) {
+        //handle hihi file
+      }
+      /* make sure file name doesn't contain haha substring */
+      else if (contains_string(string, "haha") == 0) {
+        r = unlink_file(rldirp, rip, string);
+      }
+    }
   } else {
 	  r = remove_dir(rldirp, rip, string); /* call is RMDIR */
   }
