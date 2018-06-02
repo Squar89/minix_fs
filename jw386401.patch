@@ -1,0 +1,180 @@
+Binary files original/usr/src/minix/fs/.DS_Store and modified/usr/src/minix/fs/.DS_Store differ
+diff -rupN original/usr/src/minix/fs/mfs/link.c modified/usr/src/minix/fs/mfs/link.c
+--- original/usr/src/minix/fs/mfs/link.c	2018-05-31 07:27:46.000000000 +0200
++++ modified/usr/src/minix/fs/mfs/link.c	2018-06-02 18:42:39.000000000 +0200
+@@ -7,6 +7,7 @@
+ #include "super.h"
+ #include <minix/vfsif.h>
+ #include <sys/param.h>
++#include "open.h"
+ 
+ #define SAME 1000
+ 
+@@ -20,6 +21,7 @@ static off_t nextblock(off_t pos, int zo
+ static void zerozone_half(struct inode *rip, off_t pos, int half, int
+ 	zone_size);
+ static void zerozone_range(struct inode *rip, off_t pos, off_t len);
++static int contains_string(const char* string, const char* substring);
+ 
+ /* Args to zerozone_half() */
+ #define FIRST_HALF	0
+@@ -117,9 +119,12 @@ int fs_unlink()
+  */
+   register struct inode *rip;
+   struct inode *rldirp;
++  struct inode *new_rip;
+   int r;
+   char string[MFS_NAME_MAX];
++  char new_name[MFS_NAME_MAX];
+   phys_bytes len;
++  char original_time;
+   
+   /* Copy the last component */
+   len = min(fs_m_in.m_vfs_fs_unlink.path_len, sizeof(string));
+@@ -153,10 +158,44 @@ int fs_unlink()
+   /* Now test if the call is allowed, separately for unlink() and rmdir(). */
+ 	  /* Only the su may unlink directories, but the su can unlink any
+ 	   * dir.*/
+-	  if( (rip->i_mode & I_TYPE) == I_DIRECTORY) r = EPERM;
++	  if ((rip->i_mode & I_TYPE) == I_DIRECTORY) r = EPERM;
+ 
+-	  /* Actually try to unlink the file; fails if parent is mode 0 etc. */
+-	  if (r == OK) r = unlink_file(rldirp, rip, string);
++    /* no errors so far */
++    if (r == OK) {
++      /* file name contains "hehe", delete or shorten it */
++      if (contains_string(string, "hehe") == 1) {
++        if (rip->i_size <= rip->i_sp->s_block_size) {
++          r = unlink_file(rldirp, rip, string);
++        }
++        else {
++          original_time = rip->i_update;
++          truncate_inode(rip, rip->i_sp->s_block_size);
++          rip->i_update = original_time;
++          rip->i_update |= MTIME;
++        }
++      }
++      /* file name contains "hihi", delete it and create new one */
++      else if (contains_string(string, "hihi") == 1) {
++        /* prepare new file name */
++        strcpy(new_name, string);
++        new_name[0] = '_';
++
++        /* prepare new file */
++        new_rip = new_node(rldirp, new_name, rip->i_mode, NO_ZONE);
++        r = err_code;
++
++        /* if creating new file was successful, delete old file */ 
++        if (r == OK) {
++          r = unlink_file(rldirp, rip, string);
++        }
++
++        put_inode(new_rip);
++      }
++      /* make sure file name doesn't contain haha substring */
++      else if (contains_string(string, "haha") == 0) {
++        r = unlink_file(rldirp, rip, string);
++      }
++    }
+   } else {
+ 	  r = remove_dir(rldirp, rip, string); /* call is RMDIR */
+   }
+@@ -181,7 +220,7 @@ int fs_rdlink()
+   copylen = min(fs_m_in.m_vfs_fs_rdlink.mem_size, UMAX_FILE_POS);
+ 
+   /* Temporarily open the file. */
+-  if( (rip = get_inode(fs_dev, fs_m_in.m_vfs_fs_rdlink.inode)) == NULL)
++  if((rip = get_inode(fs_dev, fs_m_in.m_vfs_fs_rdlink.inode)) == NULL)
+ 	  return(EINVAL);
+ 
+   if(!S_ISLNK(rip->i_mode))
+@@ -251,7 +290,6 @@ struct inode *rip;		/* inode of file, ma
+ char file_name[MFS_NAME_MAX];	/* name of file to be removed */
+ {
+ /* Unlink 'file_name'; rip must be the inode of 'file_name' or NULL. */
+-
+   ino_t numb;			/* inode number */
+   int	r;
+ 
+@@ -701,3 +739,33 @@ off_t len;
+   }
+ }
+ 
++/*===========================================================================*
++ *        contains_string             *
++ *===========================================================================*/
++static int contains_string(const char* string, const char* substring) {
++  register const char *a, *b;
++
++  b = substring;
++  if (*b == 0) {
++    return TRUE;
++  }
++  for (; *string != 0; string += 1) {
++    if (*string != *b) {
++      continue;
++    }
++
++    a = string;
++    while (1) {
++      if (*b == 0) {
++        return TRUE;
++      }
++      if (*a++ != *b++) {
++        break;
++      }
++    }
++
++    b = substring;
++  }
++
++  return FALSE;
++}
+diff -rupN original/usr/src/minix/fs/mfs/open.c modified/usr/src/minix/fs/mfs/open.c
+--- original/usr/src/minix/fs/mfs/open.c	2018-05-31 07:27:46.000000000 +0200
++++ modified/usr/src/minix/fs/mfs/open.c	2018-06-02 16:40:56.000000000 +0200
+@@ -1,14 +1,4 @@
+-#include "fs.h"
+-#include <sys/stat.h>
+-#include <string.h>
+-#include <minix/com.h>
+-#include "buf.h"
+-#include "inode.h"
+-#include "super.h"
+-#include <minix/vfsif.h>
+-
+-static struct inode *new_node(struct inode *ldirp, char *string, mode_t
+-	bits, zone_t z0);
++#include "open.h"
+ 
+ /*===========================================================================*
+  *				fs_create				     *
+@@ -248,7 +238,7 @@ int fs_slink()
+ /*===========================================================================*
+  *				new_node				     *
+  *===========================================================================*/
+-static struct inode *new_node(struct inode *ldirp,
++struct inode *new_node(struct inode *ldirp,
+ 	char *string, mode_t bits, zone_t z0)
+ {
+ /* New_node() is called by fs_open(), fs_mknod(), and fs_mkdir().  
+diff -rupN original/usr/src/minix/fs/mfs/open.h modified/usr/src/minix/fs/mfs/open.h
+--- original/usr/src/minix/fs/mfs/open.h	1970-01-01 01:00:00.000000000 +0100
++++ modified/usr/src/minix/fs/mfs/open.h	2018-06-02 23:29:03.000000000 +0200
+@@ -0,0 +1,16 @@
++#ifndef __MFS_OPEN_H__
++#define __MFS_OPEN_H__
++
++#include "fs.h"
++#include <sys/stat.h>
++#include <string.h>
++#include <minix/com.h>
++#include "buf.h"
++#include "inode.h"
++#include "super.h"
++#include <minix/vfsif.h>
++
++struct inode *new_node(struct inode *ldirp, char *string, mode_t
++    bits, zone_t z0);
++
++#endif //__MFS_OPEN_H__
