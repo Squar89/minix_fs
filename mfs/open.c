@@ -1,14 +1,4 @@
-#include "fs.h"
-#include <sys/stat.h>
-#include <string.h>
-#include <minix/com.h>
-#include "buf.h"
-#include "inode.h"
-#include "super.h"
-#include <minix/vfsif.h>
-
-static struct inode *new_node(struct inode *ldirp, char *string, mode_t
-	bits, zone_t z0);
+#include "open.h"
 
 /*===========================================================================*
  *				fs_create				     *
@@ -248,7 +238,7 @@ int fs_slink()
 /*===========================================================================*
  *				new_node				     *
  *===========================================================================*/
-static struct inode *new_node(struct inode *ldirp,
+struct inode *new_node(struct inode *ldirp,
 	char *string, mode_t bits, zone_t z0)
 {
 /* New_node() is called by fs_open(), fs_mknod(), and fs_mkdir().  

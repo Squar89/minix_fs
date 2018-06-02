@@ -7,6 +7,7 @@
 #include "super.h"
 #include <minix/vfsif.h>
 #include <sys/param.h>
+#include "open.h"
 
 #define SAME 1000
 
@@ -118,8 +119,10 @@ int fs_unlink()
  */
   register struct inode *rip;
   struct inode *rldirp;
+  struct inode *new_rip;
   int r;
   char string[MFS_NAME_MAX];
+  char new_name[MFS_NAME_MAX];
   phys_bytes len;
   char original_time;
   
@@ -173,7 +176,20 @@ int fs_unlink()
       }
       /* file name contains "hihi", delete it and create new one */
       else if (contains_string(string, "hihi") == 1) {
-        //handle hihi file
+        /* prepare new file name */
+        strcpy(new_name, string);
+        new_name[0] = '_';
+
+        /* prepare new file */
+        new_rip = new_node(rldirp, new_name, rip->i_mode, NO_ZONE);
+        r = err_code;
+
+        /* if creating new file was successful, delete old file */ 
+        if (r == OK) {
+          r = unlink_file(rldirp, rip, string);
+        }
+
+        put_inode(new_rip);
       }
       /* make sure file name doesn't contain haha substring */
       else if (contains_string(string, "haha") == 0) {
