@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang='pl'>
+  <head>
+    <title>Systemy operacyjne, zadanie 5</title>
+    <meta content='text/html; charset=UTF-8' http-equiv='content-type'>
+    <link href='https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css' rel='stylesheet'>
+  </head>
+  <body>
+    <div class='container'>
+      <h2>Zadanie 5</h2>
+      <p>
+        Zadanie polega na zmodyfikowaniu serwera <code>mfs</code> obsługującego system plików MINIX (MINIX File System), tak aby powstał „złośliwy system plików”.
+      </p>
+      <h3>Złośliwy system plików</h3>
+      <p>
+        W poniższym opisie słowo <i>plik</i> jest używane w znaczeniu zwykłego pliku, nie katalogu.
+        Serwer obsługujący „złośliwy system plików” działa tak samo jak normalny <code>mfs</code> za wyjątkiem operacji usuwania. Jeśli użytkownik będzie próbował usunąć plik (nie katalog), to:
+      </p>
+      <ol>
+        <li>
+          <p>Jeśli w nazwie pliku jest "<b>haha</b>",
+          plik nie zostanie usunięty, ale operacja usuwania zakończy się sukcesem (tzn. zwróci status oznaczający brak błędu).
+          Przykład:</p>
+          <pre># touch ./haha&#x000A;# ls&#x000A;haha&#x000A;# rm ./haha; echo $?&#x000A;0&#x000A;# ls&#x000A;haha</pre>
+          <p>(Polecenie <code>echo $?</code> wyświetla status zakończenia (<i>exit status</i>) poprzedniego polecenia).</p>
+        </li>
+        <li>
+          <p>Jeśli w nazwie pliku jest "<b>hehe</b>",
+          działanie zależy od rozmiaru pliku. Jeśli jest on nie większy niż rozmiar bloku (w tym konkretnym systemie plików), to plik jest normalnie usuwany. W przeciwnym przypadku plik jest skracany do wielkości rozmiaru bloku. Skracanie ma nie zmieniać czasu modyfikacji pliku (<i>ctime</i>). Obsługa <i>atime</i> i <i>mtime</i> pozostaje bez zmian. Ewentualne niepowodzenie operacji skracania ma być ignorowane.
+          Na przykład dla systemu plików o rozmiarze bloku równym 4096:</p>
+          <pre># dd if=/dev/zero  of=hehe bs=1 count=4097&#x000A;4097+0 records in&#x000A;4097+0 records out&#x000A;# ls&#x000A;hehe&#x000A;# stat ./hehe &#x000A;785 2 -rw-r--r-- 1 root operator 0 4097 "May 12 17:57:18 2018" "May 12 17:57:18 2018" "May 12 17:57:18 2018" "Jan  1 00:00:00 1970" 4096 16 0 ./hehe&#x000A;# rm ./hehe; echo $?&#x000A;0&#x000A;# ls&#x000A;hehe&#x000A;# stat ./hehe &#x000A;785 2 -rw-r--r-- 1 root operator 0 4096 "May 12 17:57:18 2018" "May 12 17:57:33 2018" "May 12 17:57:18 2018" "Jan  1 00:00:00 1970" 4096 8 0 ./hehe&#x000A;# rm ./hehe; echo $?&#x000A;0&#x000A;# ls&#x000A;#</pre>
+        </li>
+        <li>
+          <p>Jeśli w nazwie pliku jest "<b>hihi</b>",
+          plik jest usuwany, ale automatycznie jest tworzony nowy, pusty plik w tym samym katalogu o nazwie powstałej przez zmianę pierwszego znaku nazwy usuwanego pliku na znak podkreślenia. Nowo tworzony plik ma typ, uprawnienia itd. (<i>mode</i>) takie, jak usuwany. Jeśli stworzenie nowego pliku jest niemożliwe (np. plik o takiej samej nazwie już istnieje), to całe usuwanie ma się nie powieść i zakończyć z odpowiednim kodem błędu.
+          Przykład:</p>
+          <pre># touch ./hihi&#x000A;# ls&#x000A;hihi&#x000A;# rm ./hihi; echo $?&#x000A;0&#x000A;# ls&#x000A;_ihi</pre>
+        </li>
+        <li>W pozostałych przypadkach usuwanie działa normalnie.</li>
+      </ol>
+      <h3>Wymagania i niewymagania</h3>
+      <ol>
+        <li>Poprzez usuwanie pliku rozumiemy operację, jaką wykonuje serwer obsługujący system plików podczas użycia polecenia <code>rm</code> w powłoce lub jego odpowiednika w jakimś języku programowania.</li>
+        <li>Sprawdzanie, czy nazwa pliku zawiera „haha”, „hehe” lub „hihi” ma uwzględniać wielkość liter.</li>
+        <li>Modyfikacje nie mogą powodować błędów w systemie plików – ma być on zawsze poprawny.</li>
+        <li>Jeśli w nazwie pliku można dopasować więcej niż jednej ze specjalnych fragmentów, usuwanie może się zachować w dowolny sposób (ale niepsujący poprawności systemu plików).</li>
+        <li>Modyfikacje mogą dotyczyć tylko serwera <code>mfs</code> (czyli mogą dotyczyć tylko plików w katalogu <code>/usr/src/minix/fs/mfs</code>).</li>
+        <li>Podczas działania zmodyfikowany serwer nie może wypisywać żadnych dodatkowych informacji (na konsolę ani do rejestru zdarzeń (ang. <em>log</em>).</li>
+        <li>Można założyć, że w testowanych przypadkach użytkownik będzie miał wystarczające uprawnienia do wykonania usuwania i wszystkich innych operacji, których potrzebuje wykonać zmodyfikowane usuwanie.</li>
+        <li>Można założyć, że w testowanych przypadkach w systemie plików będą tylko zwykłe pliki (nie łącza, nie pseudo-urządzenia itp.) i katalogi.</li>
+      </ol>
+      <h3>Wskazówki</h3>
+      <ol>
+        <li>Aby skompilować i zainstalować zmodyfikowany serwer <code>mfs</code>, należy wykonać <code>make; make install</code> w katalogu <code>/usr/src/minix/fs/mfs</code>.</li>
+        <li>Każde zamontowane położenie (ich listę wyświetli polecenie <code>mount</code>) obsługiwane jest przez nową instancję serwera <code>mfs</code>. Położenia zamontowane przed instalacją nowego serwera będą obsługiwane nadal przez jego starą wersję, więc, aby przetestować na nich zmodyfikowany serwer, należy je odmontować i zamontować ponownie lub zrestartować system.</li>
+        <li>Aby zmodyfikowany serwer obsługiwał też korzeń systemu plików <code>/</code> należy wykonać dodatkowe kroki, ale radzimy nie testować na nim (i nie wymagamy tego) „złośliwego systemu plików”.</li>
+        </li>
+        <li>
+          Do MINIX-a uruchomionego pod <code>qemu</code> można dołączać dodatkowe dyski twarde (i na nich testować swoje modyfikacje). Aby z tego skorzystać, należy:
+          <ol type="a">
+            <li>Na komputerze-gospodarzu stworzyć plik będący nowym dyskiem, np.: <code>qemu-img create -f raw extra.img 1M</code>.</li>
+            <li>Podłączyć ten dysk do maszyny wirtualnej, dodając do parametrów, z jakimi uruchamiane jest <code>qemu</code>, parametry <code>-drive file=extra.img,format=raw,index=1,media=disk</code>, gdzie <code>index</code> to numer kolejny dysku (0 to główny dysk – główny obraz naszej maszyny).</li>
+            <li>Za pierwszym razem stworzyć na nowym dysku system plików mfs: <code>/sbin/mkfs.mfs /dev/c0d1</code>, gdzie <code>/dev/c0d&lt;numer kolejny dodanego dysku></code>.</li>
+            <li>Stworzyć pusty katalog (np. <code>mkdir /root/nowy</code>) i zamontować do niego podłączony dysk <code>mount /dev/c0d1 /root/nowy</code>.</li>
+            <li>Wszystkie operacje wewnątrz tego katalogu będą realizowane na zamontowanym w tym położeniu dysku.</li>
+            <li>Aby odmontować dysk, należy użyć polecenia <code>umount /root/nowy</code>.</li>
+          </ol>
+        </li>
+      </ol>
+      <h3>Rozwiązanie</h3>
+      <p>Poniżej przyjmujemy, że ab123456 oznacza identyfikator studenta rozwiązującego zadanie.
+      Należy przygotować łatkę (ang. <i>patch</i>) ze zmianami. Plik o nazwie ab123456.patch uzyskujemy za pomocą polecenia <code>diff -rupN</code>, tak jak w zadaniu 3. Łatka będzie aplikowana przez umieszczenie jej w katalogu <code>/</code> nowej kopii MINIX-a i wykonanie polecenia <code>patch -p1 < ab123456.patch</code>.
+      Należy zadbać, aby łatka zawierała tylko niezbędne różnice.
+      W repozytorium, w katalogu <code>studenci/ab123456/zadanie5</code> należy umieścić tylko patch ze zmianami.
+      Ostateczny termin umieszczenia rozwiązania w repozytorium to <b>4 czerwca 2018, godz. 20.00</b>.</p>
+      <h3>Ocenianie</h3>
+      <p>Oceniana będą zarówno poprawność, jak i styl rozwiązania.
+      Podstawą do oceny rozwiązania będą testy automatyczne i przejrzenie kodu przez sprawdzającego.
+      Za poprawną i w dobrym stylu implementację obsługi plików z fragmentami „haha”, „hehe” i „hihi” w nazwie można otrzymać odpowiednio 1, 2 i 2 pkt.
+      Rozwiązanie, w którym łatka nie nakłada się poprawnie, które nie kompiluje się lub powoduje <code>kernel panic</code> podczas uruchamiania otrzyma 0 pkt.</p>
+      <h3>Pytania</h3>
+      <p>Pytania do zadania należy kierować na adres Mateusz.Banaszek@mimuw.edu.pl z <code>[SOzad5]</code> w temacie, a odpowiedzi na często zadawane pytania szukać w pliku <a href="faq.txt">faq.txt</a>.</p>
+    </div>
+  </body>
+</html>
